@@ -27,13 +27,8 @@ export const useViewport = () => {
   const viewportId = useRef<string>('viewport');
   const initialized = useRef<boolean>(false);
 
-  // Initialize Cornerstone on mount
+  // Initialize Cornerstone on mount - assuming it's already initialized in main.tsx
   useEffect(() => {
-    if (!initialized.current) {
-      initCornerstoneService();
-      initialized.current = true;
-    }
-
     return () => {
       cornerstoneService.destroy();
     };
@@ -42,7 +37,9 @@ export const useViewport = () => {
   // Set up the viewport when element is available
   useEffect(() => {
     if (element && !cornerstoneService.getRenderingEngine()) {
-      cornerstoneService.createRenderingEngine(element);
+      (async () => {
+        await cornerstoneService.createRenderingEngine(element);
+      })();
     }
   }, [element]);
 

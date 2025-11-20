@@ -1,7 +1,7 @@
 // Utility functions for DICOM processing
 
 import { utilities } from '@cornerstonejs/core';
-import { dcmjs } from 'dcmjs';
+import dcmjs from 'dcmjs';
 
 /**
  * Creates an imageId for Cornerstone from a DICOM file
@@ -60,24 +60,25 @@ export const processDicomImage = (dicomData: any) => {
 export const getDicomMetadata = (arrayBuffer: ArrayBuffer) => {
   try {
     const dicomDict = dcmjs.data.DicomMessage.readFile(arrayBuffer, {});
-    const dataset = dcmjs.normalizers.normalizeDataset(dicomDict.dict);
+    const { naturalizeDataset } = dcmjs.data.DicomMetaDictionary;
+    const dataset = naturalizeDataset(dicomDict.dict);
     
     return {
-      patientName: dataset.PatientName?.Value?.[0] || '',
-      patientId: dataset.PatientID?.Value?.[0] || '',
-      studyDate: dataset.StudyDate?.Value?.[0] || '',
-      studyDescription: dataset.StudyDescription?.Value?.[0] || '',
-      seriesDescription: dataset.SeriesDescription?.Value?.[0] || '',
-      instanceNumber: dataset.InstanceNumber?.Value?.[0] || 0,
-      rows: dataset.Rows?.Value?.[0] || 0,
-      columns: dataset.Columns?.Value?.[0] || 0,
-      bitsAllocated: dataset.BitsAllocated?.Value?.[0] || 16,
-      bitsStored: dataset.BitsStored?.Value?.[0] || 16,
-      highBit: dataset.HighBit?.Value?.[0] || 15,
-      pixelRepresentation: dataset.PixelRepresentation?.Value?.[0] || 0,
-      samplesPerPixel: dataset.SamplesPerPixel?.Value?.[0] || 1,
-      photometricInterpretation: dataset.PhotometricInterpretation?.Value?.[0] || 'MONOCHROME2',
-      pixelData: dataset.PixelData?.Value?.[0],
+      patientName: dataset.PatientName || '',
+      patientId: dataset.PatientID || '',
+      studyDate: dataset.StudyDate || '',
+      studyDescription: dataset.StudyDescription || '',
+      seriesDescription: dataset.SeriesDescription || '',
+      instanceNumber: dataset.InstanceNumber || 0,
+      rows: dataset.Rows || 0,
+      columns: dataset.Columns || 0,
+      bitsAllocated: dataset.BitsAllocated || 16,
+      bitsStored: dataset.BitsStored || 16,
+      highBit: dataset.HighBit || 15,
+      pixelRepresentation: dataset.PixelRepresentation || 0,
+      samplesPerPixel: dataset.SamplesPerPixel || 1,
+      photometricInterpretation: dataset.PhotometricInterpretation || 'MONOCHROME2',
+      pixelData: dataset.PixelData,
     };
   } catch (error) {
     console.error('Error parsing DICOM metadata:', error);

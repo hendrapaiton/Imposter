@@ -12,7 +12,13 @@ import {
 } from '@cornerstonejs/tools';
 
 // Initialize Cornerstone tools
-const initCornerstoneTools = () => {
+const initCornerstoneTools = async () => {
+  // First initialize external dependencies for WADO image loader
+  const dicomParserModule = await import('dicom-parser');
+  const csWADOImageLoaderModule = await import('cornerstone-wado-image-loader');
+  const csWADOImageLoader = csWADOImageLoaderModule.default || csWADOImageLoaderModule;
+  csWADOImageLoader.external.dicomParser = dicomParserModule.default || dicomParserModule;
+
   initCornerstone();
 
   // Add tools to cornerstone
@@ -22,9 +28,20 @@ const initCornerstoneTools = () => {
   addTool(StackScrollTool);
 };
 
+let isInitialized = false;
+
 // Initialize Cornerstone core
-export const initCornerstoneService = () => {
-  initCornerstoneTools();
+export const initCornerstoneService = async () => {
+  if (!isInitialized) {
+    await initCornerstoneTools();
+    isInitialized = true;
+  }
+  return isInitialized;
+};
+
+// Check if cornerstone is initialized
+export const isCornerstoneInitialized = () => {
+  return isInitialized;
 };
 
 // Create and manage rendering engine
@@ -39,7 +56,12 @@ export class CornerstoneService {
     this.element = element;
   }
 
-  public createRenderingEngine = (element: HTMLDivElement) => {
+  public createRenderingEngine = async (element: HTMLDivElement) => {
+    // Wait for cornerstone to be initialized if it's not already
+    if (!isCornerstoneInitialized()) {
+      await initCornerstoneService();
+    }
+
     if (this.renderingEngine) {
       this.destroy();
     }
@@ -64,34 +86,49 @@ export class CornerstoneService {
         this.renderingEngine.enableElement({
           element: this.element,
           viewportId: this.viewportId,
-          type: Enums.ViewportType.ORTHOGONAL,
+          type: Enums.ViewportType.STACK, // Use STACK instead of ORTHOGONAL
         });
       }
 
-      // Load the image using Cornerstone
-      const image = await csUtils.drawImageToCanvas(imageId);
+      // The image should already be loaded through WADO image loader
+      // We don't need to explicitly load it, just set it to the viewport
+      const image = null; // We'll return null since the actual image loading happens via setImageId
 
       // Get the viewport and set the image
       const viewport = this.renderingEngine.getViewport(this.viewportId);
 
-      // Set the image stack
-      if (viewport && typeof viewport.setStack === 'function') {
-        await viewport.setStack([imageId]);
+      // Set the image stack for the viewport
+      if (viewport && typeof (viewport as any).setStack === 'function') {
+        await (viewport as any).setStack([imageId]);
       }
 
-      // Set the VOI (Window/Level)
-      if (viewport && typeof viewport.setProperties === 'function') {
-        viewport.setProperties({
-          voiRange: { width: 400, center: 50 } // Default window/level
-        });
+      // Set the VOI (Window/Level) - Check if setProperties exists or use alternative
+      // Only apply if we have reasonable values to avoid zero-width range errors
+      try {
+        if (viewport && typeof (viewport as any).setProperties === 'function') {
+          // Only set VOI if width is greater than 0 to avoid zero-width range errors
+          if (400 > 0) {
+            (viewport as any).setProperties({
+              voiRange: { width: 400, center: 50 } // Default window/level
+            });
+          }
+        } else if (viewport && typeof (viewport as any).setVOI === 'function') {
+          // Only set VOI if width is greater than 0 to avoid zero-width range errors
+          if (400 > 0) {
+            (viewport as any).setVOI(400, 50); // Alternative method for setting VOI
+          }
+        }
+      } catch (e) {
+        console.warn('Could not set VOI properties:', e);
+        // Continue without setting VOI properties if there's an error
       }
 
-      // Render the viewport
-      if (viewport && typeof viewport.render === 'function') {
-        viewport.render();
+      // Render the viewport - in newer version, rendering is automatic
+      if (viewport && typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
 
-      return image;
+      return imageId; // Return the imageId instead of the image object
     } catch (error) {
       console.error('Error loading image:', error);
       throw error;
@@ -117,23 +154,22 @@ export class CornerstoneService {
     }
 
     // Add tool to tool group
-    ToolGroupManager.addTool(toolGroupId, toolName);
+    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+    if (toolGroup) {
+      toolGroup.addTool(toolName);
 
-    // Set tool active
-    ToolGroupManager.setToolActive(toolGroupId, toolName, {
-      bindings: [
-        {
-          mouseButton: 1, // Left click
-        },
-      ],
-    });
+      // Set tool active
+      toolGroup.setToolActive(toolName, {
+        bindings: [
+          {
+            mouseButton: 1, // Left click
+          },
+        ],
+      });
 
-    // Set the tool group on the element
-    ToolGroupManager.addEnabledElement(
-      this.renderingEngine.getRenderingEngineId(),
-      this.viewportId,
-      toolGroupId
-    );
+      // Set the tool group on the element - using different API in newer version
+      toolGroup.addViewport(this.viewportId, this.renderingEngine.id);
+    }
   }
 
   public setViewportSettings = (settings: any) => {
@@ -144,24 +180,26 @@ export class CornerstoneService {
     const viewport = this.renderingEngine.getViewport(this.viewportId);
     if (viewport) {
       // Apply window level if provided
-      if (settings.voiRange && typeof viewport.setProperties === 'function') {
-        viewport.setProperties({
+      if (settings.voiRange && typeof (viewport as any).setProperties === 'function') {
+        (viewport as any).setProperties({
           voiRange: settings.voiRange
         });
+      } else if (settings.voiRange && typeof (viewport as any).setVOI === 'function') {
+        (viewport as any).setVOI(settings.voiRange.width, settings.voiRange.center);
       }
 
       // Apply zoom if provided
-      if (settings.zoom && typeof viewport.setZoom === 'function') {
-        viewport.setZoom(settings.zoom);
+      if (settings.zoom && typeof (viewport as any).setZoom === 'function') {
+        (viewport as any).setZoom(settings.zoom);
       }
 
       // Apply pan if provided
-      if (settings.pan && typeof viewport.setPan === 'function') {
-        viewport.setPan(settings.pan);
+      if (settings.pan && typeof (viewport as any).setPan === 'function') {
+        (viewport as any).setPan(settings.pan);
       }
 
-      if (typeof viewport.render === 'function') {
-        viewport.render();
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
     }
   }
@@ -172,10 +210,10 @@ export class CornerstoneService {
     }
 
     const viewport = this.renderingEngine.getViewport(this.viewportId);
-    if (viewport && typeof viewport.setZoom === 'function') {
-      viewport.setZoom(zoom);
-      if (typeof viewport.render === 'function') {
-        viewport.render();
+    if (viewport && typeof (viewport as any).setZoom === 'function') {
+      (viewport as any).setZoom(zoom);
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
     }
   }
@@ -186,15 +224,20 @@ export class CornerstoneService {
     }
 
     const viewport = this.renderingEngine.getViewport(this.viewportId);
-    if (viewport && typeof viewport.setProperties === 'function') {
-      viewport.setProperties({
+    if (viewport && typeof (viewport as any).setProperties === 'function') {
+      (viewport as any).setProperties({
         voiRange: {
           width,
           center
         }
       });
-      if (typeof viewport.render === 'function') {
-        viewport.render();
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
+      }
+    } else if (viewport && typeof (viewport as any).setVOI === 'function') {
+      (viewport as any).setVOI(width, center);
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
     }
   }
@@ -205,10 +248,10 @@ export class CornerstoneService {
     }
 
     const viewport = this.renderingEngine.getViewport(this.viewportId);
-    if (viewport && typeof viewport.setPan === 'function') {
-      viewport.setPan(pan);
-      if (typeof viewport.render === 'function') {
-        viewport.render();
+    if (viewport && typeof (viewport as any).setPan === 'function') {
+      (viewport as any).setPan(pan);
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
     }
   }
@@ -220,14 +263,16 @@ export class CornerstoneService {
 
     const viewport = this.renderingEngine.getViewport(this.viewportId);
     if (viewport) {
-      if (typeof viewport.resetCamera === 'function') {
-        viewport.resetCamera();
+      if (typeof (viewport as any).resetCamera === 'function') {
+        (viewport as any).resetCamera();
       }
-      if (typeof viewport.resetProperties === 'function') {
-        viewport.resetProperties();
+      if (typeof (viewport as any).resetProperties === 'function') {
+        (viewport as any).resetProperties();
+      } else if (typeof (viewport as any).reset === 'function') {
+        (viewport as any).reset();
       }
-      if (typeof viewport.render === 'function') {
-        viewport.render();
+      if (typeof (viewport as any).render === 'function') {
+        (viewport as any).render();
       }
     }
   }

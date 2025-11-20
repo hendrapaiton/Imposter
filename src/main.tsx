@@ -5,10 +5,10 @@ import App from './App.tsx'
 import { initCornerstoneService } from './services/cornerstoneService'
 
 // Initialize cornerstone services before rendering the app
-initCornerstoneService();
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+initCornerstoneService().then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+});

@@ -73,25 +73,26 @@ export class DicomLoaderService {
 
           // Parse DICOM using dcmjs to extract metadata
           const dicomDict = dcmjs.data.DicomMessage.readFile(arrayBuffer, {});
-          const dataset = dcmjs.normalizers.normalizeDataset(dicomDict.dict);
+          const { naturalizeDataset } = dcmjs.data.DicomMetaDictionary;
+          const dataset = naturalizeDataset(dicomDict.dict);
 
           // Create imageId using WADO loader format
           const imageId = `wadouri:${URL.createObjectURL(file)}`;
 
           // Extract required DICOM tags
           const instance: Instance = {
-            id: dataset.SOPInstanceUID?.Value?.[0] || '',
-            instanceNumber: dataset.InstanceNumber?.Value?.[0] || 0,
+            id: dataset.SOPInstanceUID || '',
+            instanceNumber: dataset.InstanceNumber || 0,
             imageId: imageId,
-            sopClassUid: dataset.SOPClassUID?.Value?.[0] || '',
-            rows: dataset.Rows?.Value?.[0] || 0,
-            columns: dataset.Columns?.Value?.[0] || 0,
-            bitsAllocated: dataset.BitsAllocated?.Value?.[0] || 16,
-            bitsStored: dataset.BitsStored?.Value?.[0] || 16,
-            highBit: dataset.HighBit?.Value?.[0] || 15,
-            pixelRepresentation: dataset.PixelRepresentation?.Value?.[0] || 0,
-            samplesPerPixel: dataset.SamplesPerPixel?.Value?.[0] || 1,
-            photometricInterpretation: dataset.PhotometricInterpretation?.Value?.[0] || 'MONOCHROME2',
+            sopClassUid: dataset.SOPClassUID || '',
+            rows: dataset.Rows || 0,
+            columns: dataset.Columns || 0,
+            bitsAllocated: dataset.BitsAllocated || 16,
+            bitsStored: dataset.BitsStored || 16,
+            highBit: dataset.HighBit || 15,
+            pixelRepresentation: dataset.PixelRepresentation || 0,
+            samplesPerPixel: dataset.SamplesPerPixel || 1,
+            photometricInterpretation: dataset.PhotometricInterpretation || 'MONOCHROME2',
           };
 
           resolve(instance);
